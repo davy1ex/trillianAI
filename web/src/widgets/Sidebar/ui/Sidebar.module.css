@@ -1,0 +1,90 @@
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background: var(--code-bg);
+  border-right: 1px solid var(--border);
+}
+
+.header {
+  padding: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-h);
+  letter-spacing: -0.2px;
+}
+
+.newButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.newButton:hover {
+  border-color: var(--accent);
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px;
+}
+
+.itemWrapper {
+  margin-bottom: 2px;
+}
+
+.item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item:hover {
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+.itemActive {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.editInput {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+}

@@ -1,0 +1,412 @@
+openapi: "3.1.0"
+info:
+  title: SimpleAgent Backend API
+  description: |
+    Express backend on top of LM Studio SDK.
+
+    Provides:
+    - CRUD for conversations and messages (in-memory storage)
+    - LLM inference with streaming via SSE (model: Qwen 3 4B)
+    - Reasoning-aware responses with `<think>` tag parsing
+  version: "1.0.0"
+servers:
+  - url: "http://localhost:3001"
+    description: Local dev server
+
+components:
+  schemas:
+    Conversation:
+      type: object
+      required: [id, title, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        title:
+          type: string
+          example: "Новый чат"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Message:
+      type: object
+      required: [id, conversationId, role, content, reasoning, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        reasoning:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  parameters:
+    conversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    messageId:
+      name: messageId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+paths:
+  /api/conversations:
+    get:
+      summary: List all conversations
+      operationId: listConversations
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+
+    post:
+      summary: Create a new conversation
+      operationId: createConversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  example: "Новый чат"
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          description: Missing title
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/conversations/{conversationId}:
+    get:
+      summary: Get a single conversation
+      operationId: getConversation
+      parameters:
+        - $ref: "#/components/parameters/conversationId"
+      responses:
+        "200":
+          description: Conversation object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      summary: Update conversation title
+      operationId: updateConversation
+      parameters:
+        - $ref: "#/components/parameters/conversationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+      responses:
+        "200":
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          description: Missing title
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      summary: Delete a conversation
+      operationId: deleteConversation
+      parameters:
+        - $ref: "#/components/parameters/conversationId"
+      responses:
+        "204":
+          description: Deleted successfully
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/conversations/{conversationId}/messages:
+    get:
+      summary: List messages for a conversation
+      operationId: listMessages
+      parameters:
+        - $ref: "#/components/parameters/conversationId"
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      summary: Add a message to a conversation
+      operationId: createMessage
+      parameters:
+        - $ref: "#/components/parameters/conversationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role, content]
+              properties:
+                role:
+                  type: string
+                  enum: [user, assistant]
+                content:
+                  type: string
+                reasoning:
+                  type: string
+                  description: Reasoning content (only for assistant messages)
+      responses:
+        "201":
+          description: Created message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/messages/{messageId}:
+    delete:
+      summary: Delete a message
+      operationId: deleteMessage
+      parameters:
+        - $ref: "#/components/parameters/messageId"
+        - name: conversationId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted successfully
+        "400":
+          description: Missing conversationId query param
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Message not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/models:
+    get:
+      summary: List available models
+      operationId: listModels
+      responses:
+        "200":
+          description: Available models
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    key:
+                      type: string
+                    provider:
+                      type: string
+                      enum: [lmstudio]
+
+  /api/models/active:
+    get:
+      summary: Get currently active model
+      operationId: getActiveModel
+      responses:
+        "200":
+          description: Active model info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:
+                    type: string
+                    example: "qwen/qwen3-4b-2507"
+                  provider:
+                    type: string
+                    enum: [lmstudio]
+                  status:
+                    type: string
+                    enum: [loaded]
+
+  /api/chat:
+    post:
+      summary: Send a prompt and stream the LLM response
+      operationId: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                  description: The user message
+                  example: "What is the meaning of life?"
+                conversationId:
+                  type: string
+                  format: uuid
+                  description: |
+                    ID of existing conversation. If omitted, a new conversation
+                    is created automatically.
+                enableReasoning:
+                  type: boolean
+                  description: |
+                    When `true` the server parses `<think>...</think>` blocks
+                    and emits them as separate `reasoning` events.
+                  default: true
+      responses:
+        "200":
+          description: SSE stream of generated tokens
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  Each line follows the SSE protocol.
+
+                  Events:
+
+                  | event      | payload                                          | description                      |
+                  |------------|--------------------------------------------------|----------------------------------|
+                  | `content`  | `{ content: string }`                            | Non-reasoning text fragment      |
+                  | `reasoning`| `{ content: string }`                            | Reasoning text fragment          |
+                  | `done`     | `{ conversationId, messageId }`                  | Generation finished              |
+                  | `error`    | `{ error: string }`                              | Error occurred                   |
+              example: |
+                event: content
+                data: {"content":"Hello"}
+
+                event: done
+                data: {"conversationId":"550e8400-e29b-41d4-a716-446655440000","messageId":"660e8400-e29b-41d4-a716-446655440001"}
+
+        "400":
+          description: Missing prompt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Model not loaded or prediction failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/health:
+    get:
+      summary: Health check
+      operationId: health
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
