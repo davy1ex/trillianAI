@@ -4,14 +4,15 @@ function timestamp(): string {
   return new Date().toISOString()
 }
 
-const conversations: Conversation[] = [
-  {
-    id: 'default',
-    title: 'Новый чат',
-    createdAt: timestamp(),
-    updatedAt: timestamp(),
-  },
-]
+  const conversations: Conversation[] = [
+    {
+      id: 'default',
+      title: 'Новый чат',
+      systemPrompt: null,
+      createdAt: timestamp(),
+      updatedAt: timestamp(),
+    },
+  ]
 
 export function listConversations(): Conversation[] {
   return [...conversations]
@@ -25,6 +26,7 @@ export function createConversation(title: string): Conversation {
   const conversation: Conversation = {
     id: crypto.randomUUID(),
     title,
+    systemPrompt: null,
     createdAt: timestamp(),
     updatedAt: timestamp(),
   }
@@ -41,6 +43,13 @@ export function updateConversation(id: string, data: Partial<Pick<Conversation, 
     updatedAt: timestamp(),
   }
   return conversations[idx]
+}
+
+export function updateConversationSystemPrompt(id: string, systemPrompt: string | null): void {
+  const idx = conversations.findIndex(c => c.id === id)
+  if (idx === -1) return
+  conversations[idx].systemPrompt = systemPrompt
+  conversations[idx].updatedAt = timestamp()
 }
 
 export function deleteConversation(id: string): boolean {

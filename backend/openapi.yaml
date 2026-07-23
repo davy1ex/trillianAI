@@ -7,7 +7,7 @@ info:
     Provides:
     - CRUD for conversations and messages (in-memory storage)
     - LLM inference with streaming via SSE (model: Qwen 3 4B)
-    - Reasoning-aware responses with `<think>` tag parsing
+    - Reasoning extraction via `[REASONING]` / `[/REASONING]` markers
   version: "1.0.0"
 servers:
   - url: "http://localhost:3001"
@@ -26,6 +26,10 @@ components:
         title:
           type: string
           example: "Новый чат"
+        systemPrompt:
+          type: string
+          nullable: true
+          description: Last system prompt used for this conversation
         createdAt:
           type: string
           format: date-time
@@ -333,24 +337,46 @@ paths:
           application/json:
             schema:
               type: object
-              required: [prompt]
-              properties:
-                prompt:
-                  type: string
-                  description: The user message
-                  example: "What is the meaning of life?"
-                conversationId:
-                  type: string
-                  format: uuid
-                  description: |
-                    ID of existing conversation. If omitted, a new conversation
-                    is created automatically.
-                enableReasoning:
-                  type: boolean
-                  description: |
-                    When `true` the server parses `<think>...</think>` blocks
-                    and emits them as separate `reasoning` events.
-                  default: true
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          description: The user message
+          example: "What is the meaning of life?"
+        conversationId:
+          type: string
+          format: uuid
+          description: |
+            ID of existing conversation. If omitted, a new conversation
+            is created automatically.
+        enableReasoning:
+          type: boolean
+          description: |
+            When `true` the backend injects a reasoning instruction into
+            the system prompt and parses `[REASONING]…[/REASONING]` markers
+            in the model output, emitting reasoning fragments as separate
+            `reasoning` SSE events.
+          default: true
+        baseUrl:
+          type: string
+          description: |
+            LM Studio server HTTP URL (e.g. `http://localhost:1234`).
+            If omitted, the server uses its default or environment
+            configuration.
+          example: "http://localhost:1234"
+        modelName:
+          type: string
+          description: |
+            Model identifier to use for inference (e.g. `qwen/qwen3-4b-2507`).
+            If omitted, the server uses its default or environment
+            configuration.
+          example: "qwen/qwen3-4b-2507"
+        systemPrompt:
+          type: string
+          description: |
+            System prompt to prepend to the conversation. If provided, it is
+            sent as a `system` role message before the conversation history.
+          example: "You are a helpful assistant."
       responses:
         "200":
           description: SSE stream of generated tokens
@@ -370,8 +396,11 @@ paths:
                   | `done`     | `{ conversationId, messageId }`                  | Generation finished              |
                   | `error`    | `{ error: string }`                              | Error occurred                   |
               example: |
+                event: reasoning
+                data: {"content":"The user's input "666" is a numeric sequence..."}
+
                 event: content
-                data: {"content":"Hello"}
+                data: {"content":"666 is a number. It has no inherent meaning beyond that."}
 
                 event: done
                 data: {"conversationId":"550e8400-e29b-41d4-a716-446655440000","messageId":"660e8400-e29b-41d4-a716-446655440001"}

@@ -88,3 +88,24 @@
   outline: none;
   box-sizing: border-box;
 }
+
+.settingsButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 12px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.settingsButton:hover {
+  border-color: var(--accent);
+  color: var(--text-h);
+}

@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useConversationStore } from '../../../entities/conversation'
 import { createConversation, updateConversationTitle } from '../../../shared/api/conversations'
 import type { Conversation } from '../../../entities/conversation'
 import styles from './Sidebar.module.css'
 
 export const Sidebar = () => {
+  const navigate = useNavigate()
   const conversations = useConversationStore((s) => s.conversations)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
   const setActiveConversation = useConversationStore((s) => s.setActiveConversation)
@@ -77,6 +79,10 @@ export const Sidebar = () => {
           </div>
         ))}
       </div>
+
+      <button className={styles.settingsButton} onClick={() => navigate('/settings')} type="button">
+        Settings
+      </button>
     </aside>
   )
 }

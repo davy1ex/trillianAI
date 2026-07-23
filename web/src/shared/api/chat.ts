@@ -15,10 +15,13 @@ export function sendChatMessageSSE(
   conversationId: string,
   handlers: ChatEventHandlers,
   enableReasoning = true,
+  baseUrl?: string,
+  modelName?: string,
+  systemPrompt?: string,
 ): () => void {
   const controller = new AbortController()
 
-  const body = JSON.stringify({ prompt, conversationId, enableReasoning })
+  const body = JSON.stringify({ prompt, conversationId, enableReasoning, baseUrl, modelName, systemPrompt })
 
   fetch('/api/chat', {
     method: 'POST',

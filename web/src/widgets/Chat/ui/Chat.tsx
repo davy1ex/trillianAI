@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useMessageStore } from '../../../entities/message'
 import { useConversationStore } from '../../../entities/conversation'
+import { useSettingsStore } from '../../../entities/settings'
 import { sendChatMessageSSE } from '../../../shared/api/chat'
 import { createConversation, updateConversationTitle } from '../../../shared/api/conversations'
 import { fetchMessages } from '../../../shared/api/messages'
@@ -16,7 +17,7 @@ function slugFromPrompt(prompt: string): string {
 }
 
 function MessageBubble({ message }: { message: Message }) {
-  const [showReasoning, setShowReasoning] = useState(false)
+  const [showReasoning, setShowReasoning] = useState(true)
 
   return (
     <div className={`${styles.message} ${message.role === 'user' ? styles.user : styles.assistant}`}>
@@ -57,6 +58,10 @@ export const Chat = () => {
   const setMessages = useMessageStore((s) => s.setMessages)
   const addMessage = useMessageStore((s) => s.addMessage)
   const appendChunk = useMessageStore((s) => s.appendChunk)
+  const enableReasoning = useSettingsStore((s) => s.enableReasoning)
+  const systemPrompt = useSettingsStore((s) => s.systemPrompt)
+  const baseUrl = useSettingsStore((s) => s.baseUrl)
+  const modelName = useSettingsStore((s) => s.modelName)
 
   const messages = useMemo(
     () => (activeConversationId ? (messagesByConversation[activeConversationId] ?? []) : []),
@@ -112,6 +117,10 @@ export const Chat = () => {
           onDone: () => setIsStreaming(false),
           onError: () => setIsStreaming(false),
         },
+        enableReasoning,
+        baseUrl,
+        modelName,
+        systemPrompt,
       )
     }
 
@@ -124,7 +133,7 @@ export const Chat = () => {
         send(conv.id)
       })
     }
-  }, [input, activeConversationId, isStreaming, conversations, addMessage, appendChunk, setConversations, setActiveConversation, renameConversation])
+  }, [input, activeConversationId, isStreaming, conversations, addMessage, appendChunk, setConversations, setActiveConversation, renameConversation, enableReasoning, systemPrompt, baseUrl, modelName])
 
   return (
     <div className={styles.container}>
