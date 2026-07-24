@@ -8,11 +8,11 @@ export const SettingsPage = () => {
   const navigate = useNavigate()
   const baseUrl = useSettingsStore((s) => s.baseUrl)
   const modelName = useSettingsStore((s) => s.modelName)
-  const enableReasoning = useSettingsStore((s) => s.enableReasoning)
+  const reasoningLevel = useSettingsStore((s) => s.reasoningLevel)
   const systemPrompt = useSettingsStore((s) => s.systemPrompt)
   const setBaseUrl = useSettingsStore((s) => s.setBaseUrl)
   const setModelName = useSettingsStore((s) => s.setModelName)
-  const setEnableReasoning = useSettingsStore((s) => s.setEnableReasoning)
+  const setReasoningLevel = useSettingsStore((s) => s.setReasoningLevel)
   const setSystemPrompt = useSettingsStore((s) => s.setSystemPrompt)
 
   return (
@@ -55,14 +55,17 @@ export const SettingsPage = () => {
           </div>
           <div className={styles.field}>
             <label className={styles.label}>Reasoning</label>
-            <label className={styles.toggle}>
-              <input
-                type="checkbox"
-                checked={enableReasoning}
-                onChange={(e) => setEnableReasoning(e.target.checked)}
-              />
-              <span className={styles.toggleSlider} />
-            </label>
+            <select
+              className={styles.select}
+              value={reasoningLevel}
+              onChange={(e) => setReasoningLevel(e.target.value as any)}
+            >
+              <option value="off">Off</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="on">On</option>
+            </select>
           </div>
         </section>
 

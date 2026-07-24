@@ -59,7 +59,7 @@ export const Chat = () => {
   const setMessages = useMessageStore((s) => s.setMessages)
   const addMessage = useMessageStore((s) => s.addMessage)
   const appendChunk = useMessageStore((s) => s.appendChunk)
-  const enableReasoning = useSettingsStore((s) => s.enableReasoning)
+  const reasoningLevel = useSettingsStore((s) => s.reasoningLevel)
   const systemPrompt = useSettingsStore((s) => s.systemPrompt)
   const baseUrl = useSettingsStore((s) => s.baseUrl)
   const modelName = useSettingsStore((s) => s.modelName)
@@ -127,7 +127,7 @@ export const Chat = () => {
           onDone: () => setIsStreaming(false),
           onError: () => setIsStreaming(false),
         },
-        enableReasoning,
+        reasoningLevel,
         baseUrl,
         modelName,
         systemPrompt,
@@ -143,7 +143,7 @@ export const Chat = () => {
         send(conv.id)
       })
     }
-  }, [input, activeConversationId, isStreaming, conversations, addMessage, appendChunk, setConversations, setActiveConversation, renameConversation, enableReasoning, systemPrompt, baseUrl, modelName])
+  }, [input, activeConversationId, isStreaming, conversations, addMessage, appendChunk, setConversations, setActiveConversation, renameConversation, reasoningLevel, systemPrompt, baseUrl, modelName])
 
   return (
     <div className={styles.container}>

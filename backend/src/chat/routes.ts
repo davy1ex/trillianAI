@@ -1,46 +1,13 @@
 import { Router } from 'express'
-import { LMStudioClient } from '@lmstudio/sdk'
-import type { LMStudioClientConstructorOpts } from '@lmstudio/sdk'
 import * as conversationStore from '../entities/conversation/store'
 import * as messageStore from '../entities/message/store'
 
 const router = Router()
 
-let currentClient: LMStudioClient | null = null
-let currentModelKey: string | null = null
-let model: Awaited<ReturnType<LMStudioClient['llm']['model']>> | null = null
-let modelLoading: Promise<void> | null = null
-
-function toWsUrl(httpUrl?: string): string | undefined {
-  if (!httpUrl) return undefined
-  return httpUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
-}
-
-function getClient(baseUrl?: string): LMStudioClient {
-  const wsUrl = toWsUrl(baseUrl)
-  if (wsUrl) {
-    return new LMStudioClient({ baseUrl: wsUrl } satisfies LMStudioClientConstructorOpts)
-  }
-  if (!currentClient) {
-    currentClient = new LMStudioClient()
-  }
-  return currentClient
-}
-
-async function ensureModel(client: LMStudioClient, modelKey: string) {
-  if (model && currentModelKey === modelKey) return
-  if (modelLoading) return modelLoading
-  modelLoading = (async () => {
-    console.info(`Loading model: ${modelKey}...`)
-    model = await client.llm.model(modelKey)
-    currentModelKey = modelKey
-    console.info('Model loaded')
-  })()
-  return modelLoading
-}
+const responseIds: Record<string, string> = {}
 
 router.post('/', async (req, res) => {
-  const { prompt, conversationId, enableReasoning = true, baseUrl, modelName, systemPrompt } = req.body
+  const { prompt, conversationId, reasoningLevel = 'on', baseUrl, modelName, systemPrompt } = req.body
 
   if (!prompt || typeof prompt !== 'string') {
     return res.status(400).json({ error: 'prompt is required' })
@@ -48,9 +15,7 @@ router.post('/', async (req, res) => {
 
   try {
     const modelKey = modelName || process.env.MODEL_KEY || 'qwen/qwen3-4b-2507'
-    const client = getClient(baseUrl)
-
-    await ensureModel(client, modelKey)
+    const apiBase = baseUrl || process.env.LM_STUDIO_URL || 'http://localhost:1234'
 
     if (conversationId && !conversationStore.getConversation(conversationId)) {
       return res.status(404).json({ error: 'Conversation not found' })
@@ -62,31 +27,51 @@ router.post('/', async (req, res) => {
     const assistantMessage = messageStore.addMessage(cid, 'assistant', '')
 
     const conv = conversationStore.getConversation(cid)
-    const prevSystemPrompt = conv?.systemPrompt ?? null
-    const newSystemPrompt = systemPrompt && typeof systemPrompt === 'string' ? systemPrompt : null
-    if (conv) {
-      conversationStore.updateConversationSystemPrompt(cid, newSystemPrompt)
+    const newSystemPrompt = systemPrompt && typeof systemPrompt === 'string' ? systemPrompt : undefined
+    if (conv && systemPrompt !== undefined) {
+      conversationStore.updateConversationSystemPrompt(cid, systemPrompt)
     }
 
-    const history = messageStore.getMessages(cid)
-    // exclude the empty assistant message that was just created
-    const historyMsgs = history.slice(0, -1)
-    const systemPromptChanged = newSystemPrompt !== prevSystemPrompt
+    const prevResponseId = responseIds[cid]
 
-    const thinkInstruction = 'Think step by step before answering. Start your reasoning with [REASONING] and end it with [/REASONING], then give your final answer.'
+    async function callLmStudio(level: string) {
+      const body: Record<string, any> = {
+        model: modelKey,
+        input: prompt,
+        stream: true,
+        reasoning: level,
+        store: true,
+      }
+      if (newSystemPrompt) body.system_prompt = newSystemPrompt
+      if (prevResponseId) body.previous_response_id = prevResponseId
 
-    const llmMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = []
-    if (newSystemPrompt) {
-      llmMessages.push({
-        role: 'system',
-        content: enableReasoning ? `${newSystemPrompt}\n\n${thinkInstruction}` : newSystemPrompt,
+      return await fetch(`${apiBase}/api/v1/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       })
-    } else if (enableReasoning) {
-      llmMessages.push({ role: 'system', content: thinkInstruction })
     }
-    for (const msg of historyMsgs) {
-      if (systemPromptChanged && msg.role === 'assistant') continue
-      llmMessages.push({ role: msg.role, content: msg.content })
+
+    const validLevels = ['off', 'low', 'medium', 'high', 'on']
+    let currentLevel = validLevels.includes(reasoningLevel) ? reasoningLevel : 'on'
+
+    let response = await callLmStudio(currentLevel)
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => 'Unknown error')
+      const isReasoningError = errText.includes('Reasoning setting') && errText.includes('not supported')
+      if (isReasoningError && currentLevel !== 'on') {
+        response = await callLmStudio('on')
+      }
+      if (!response.ok) {
+        const finalErr = await response.text().catch(() => 'Unknown error')
+        return res.status(502).json({ error: `LM Studio API error: ${finalErr}` })
+      }
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      return res.status(502).json({ error: 'No response body from LM Studio' })
     }
 
     res.setHeader('Content-Type', 'text/event-stream')
@@ -94,32 +79,54 @@ router.post('/', async (req, res) => {
     res.setHeader('Connection', 'keep-alive')
     res.setHeader('X-Accel-Buffering', 'no')
 
-    const prediction = model!.respond(
-      llmMessages,
-      {
-        reasoningParsing: {
-          enabled: enableReasoning,
-          startString: '[REASONING]',
-          endString: '[/REASONING]',
-        },
-      },
-    )
+    const decoder = new TextDecoder()
+    let buf = ''
+    let currentEvent = ''
 
-    for await (const fragment of prediction) {
-      const type = fragment.reasoningType
-      // skip marker fragments ([REASONING] / [/REASONING])
-      if (type === 'reasoningStartTag' || type === 'reasoningEndTag') continue
+    const flushableEvents = new Set([
+      'reasoning.delta',
+      'message.delta',
+    ])
 
-      const isReasoning = enableReasoning && type === 'reasoning'
-      messageStore.appendChunk(
-        cid,
-        isReasoning ? '' : fragment.content,
-        isReasoning ? fragment.content : undefined,
-      )
-      if (isReasoning) {
-        res.write(`event: reasoning\ndata: ${JSON.stringify({ content: fragment.content })}\n\n`)
-      } else {
-        res.write(`event: content\ndata: ${JSON.stringify({ content: fragment.content })}\n\n`)
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim()
+          continue
+        }
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim()
+          if (!data) continue
+          try {
+            const parsed = JSON.parse(data)
+
+            if (currentEvent === 'chat.end' && parsed.result?.response_id) {
+              responseIds[cid] = parsed.result.response_id
+            }
+
+            if (!flushableEvents.has(currentEvent)) continue
+
+            const text = parsed.content
+            if (!text) continue
+
+            if (currentEvent === 'reasoning.delta') {
+              messageStore.appendChunk(cid, '', text)
+              res.write(`event: reasoning\ndata: ${JSON.stringify({ content: text })}\n\n`)
+            } else {
+              messageStore.appendChunk(cid, text, undefined)
+              res.write(`event: content\ndata: ${JSON.stringify({ content: text })}\n\n`)
+            }
+          } catch {
+            // skip malformed JSON
+          }
+        }
       }
     }
 
