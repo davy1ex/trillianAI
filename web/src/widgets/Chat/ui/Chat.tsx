@@ -47,6 +47,7 @@ export const Chat = () => {
   const [isStreaming, setIsStreaming] = useState(false)
   const abortRef = useRef<(() => void) | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const autoScrollRef = useRef(true)
 
   const conversations = useConversationStore((s) => s.conversations)
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
@@ -75,8 +76,16 @@ export const Chat = () => {
     })
   }, [activeConversationId, setMessages])
 
+  const handleScroll = useCallback(() => {
+    const el = listRef.current
+    if (!el) return
+    const threshold = 40
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+    autoScrollRef.current = atBottom
+  }, [])
+
   useEffect(() => {
-    if (listRef.current) {
+    if (listRef.current && autoScrollRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight
     }
   }, [messages])
@@ -97,6 +106,7 @@ export const Chat = () => {
     setInput('')
 
     const send = (cid: string) => {
+      autoScrollRef.current = true
       addMessage(cid, 'user', text)
       addMessage(cid, 'assistant', '')
       setIsStreaming(true)
@@ -140,7 +150,7 @@ export const Chat = () => {
       {messages.length === 0 ? (
         <div className={styles.emptyState}>Новый чат. Напишите что-нибудь...</div>
       ) : (
-        <div ref={listRef} className={styles.messageList}>
+        <div ref={listRef} className={styles.messageList} onScroll={handleScroll}>
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
           ))}
